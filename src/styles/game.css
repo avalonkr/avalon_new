@@ -159,7 +159,7 @@
 .history-scroll-area::-webkit-scrollbar { width: 6px; }
 .history-scroll-area::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
 .history-scroll-area::-webkit-scrollbar-thumb { background: var(--gold-secondary); border-radius: 4px; }
-@media (min-width: 768px) { .history-scroll-area { max-height: none; } }
+@media (min-width: 768px) { .history-scroll-area { max-height: 60vh; } }
 
 .history-item {
   display: flex; justify-content: space-between; align-items: center;
