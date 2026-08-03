@@ -1,7 +1,7 @@
 import { db } from "../../firebase-config.js";
 import { 
   ref, set, get, onValue, update, onDisconnect, 
-  query, orderByChild, endAt, push, runTransaction, serverTimestamp 
+  query, orderByChild, endAt, push, runTransaction, serverTimestamp, limitToLast, orderByKey 
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
 class FirebaseAPI {
@@ -156,9 +156,15 @@ class FirebaseAPI {
   }
 
   // --- History (Past Games) ---
-  subscribeToHistoryList(callback) {
-    if (this.listeners['history']) this.listeners['history']();
-    this.listeners['history'] = onValue(ref(this.db, 'past_games'), (snap) => callback(snap.val()));
+  async fetchHistoryPage(limitCount, endAtKey = null) {
+    let q;
+    if (endAtKey) {
+      q = query(ref(this.db, 'past_games'), orderByKey(), endAt(endAtKey), limitToLast(limitCount + 1));
+    } else {
+      q = query(ref(this.db, 'past_games'), orderByKey(), limitToLast(limitCount));
+    }
+    const snap = await get(q);
+    return snap.val() || {};
   }
 
   async saveGameHistory(gameData) {

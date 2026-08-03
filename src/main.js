@@ -22,7 +22,10 @@ let appState = {
   playersData: {},
   gameState: 'lobby',
   playData: null,
-  historyData: null
+  historyItems: [],
+  historyLastKey: null,
+  hasMoreHistory: true,
+  isLoadingHistory: false
 };
 
 let isProcessingTransition = false;
@@ -112,18 +115,67 @@ function renderLobby() {
         }
       };
     },
-    onOpenHistory: () => {
-      api.subscribeToHistoryList((data) => {
-        appState.historyData = data;
-        if (appState.view === 'history') {
-          renderHistoryView(viewContainer, data, {
-            onClose: () => { api.unsubscribeAll(); renderLobby(); },
-            onDelete: (id) => api.deleteGameHistory(id)
-          });
-        }
-      });
+    onOpenHistory: async () => {
       appState.view = 'history';
       updateHeader();
+      
+      appState.historyItems = [];
+      appState.historyLastKey = null;
+      appState.hasMoreHistory = true;
+      appState.isLoadingHistory = false;
+
+      const refreshHistoryView = (isInitial = false) => {
+        if (appState.view !== 'history') return;
+        renderHistoryView(viewContainer, appState.historyItems, {
+          onClose: () => { appState.historyItems = []; renderLobby(); },
+          onDelete: async (id) => {
+            await api.deleteGameHistory(id);
+            appState.historyItems = appState.historyItems.filter(([key]) => key !== id);
+            refreshHistoryView(true); // 재렌더링
+          },
+          onLoadMore: async () => {
+            if (appState.isLoadingHistory || !appState.hasMoreHistory) return;
+            appState.isLoadingHistory = true;
+            try {
+              const data = await api.fetchHistoryPage(10, appState.historyLastKey);
+              let entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+              if (appState.historyLastKey) {
+                entries = entries.filter(([key]) => key !== appState.historyLastKey);
+              }
+              if (entries.length === 0) {
+                appState.hasMoreHistory = false;
+              } else {
+                entries.reverse(); // 내림차순 (최신순)
+                appState.historyLastKey = entries[entries.length - 1][0];
+                appState.historyItems.push(...entries);
+              }
+              refreshHistoryView(false); // isInitial = false (추가 렌더링)
+            } finally {
+              appState.isLoadingHistory = false;
+            }
+          },
+          hasMore: appState.hasMoreHistory,
+          isInitial: isInitial
+        });
+      };
+
+      appState.isLoadingHistory = true;
+      // 처음에 로딩 표시를 위해 빈 상태로 렌더링
+      refreshHistoryView(true);
+      
+      try {
+        const data = await api.fetchHistoryPage(10);
+        let entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+        if (entries.length < 10) appState.hasMoreHistory = false;
+        entries.reverse();
+        if (entries.length > 0) {
+          appState.historyLastKey = entries[entries.length - 1][0];
+          appState.historyItems = entries;
+        }
+        refreshHistoryView(true);
+      } finally {
+        appState.isLoadingHistory = false;
+      }
     }
   });
 }
