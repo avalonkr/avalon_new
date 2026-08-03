@@ -47,13 +47,13 @@ export function renderHistoryView(container, historyItems, callbacks) {
       <div class="history-layout animate-fade-in">
         <div class="history-list-panel">
           <h3>📜 저장된 게임 목록</h3>
+          <button id="closeHistoryBtn" class="btn-secondary btn-sm" style="margin-bottom: 15px; width: 100%;">로비로 돌아가기</button>
           <div id="historyListContainer" class="history-scroll-area">
             ${historyItems && historyItems.length > 0 
               ? historyItems.map(renderItem).join('') 
               : '<p class="empty-text">저장된 기록이 없습니다.</p>'}
             ${callbacks.hasMore ? '<div id="loadingMoreIndicator" style="text-align:center; padding: 10px; color: var(--gold-secondary);">스크롤하여 더 보기...</div>' : ''}
           </div>
-          <button id="closeHistoryBtn" class="btn-secondary btn-sm" style="margin-top: 15px; width: 100%;">로비로 돌아가기</button>
         </div>
         
         <div class="history-viewer-panel">

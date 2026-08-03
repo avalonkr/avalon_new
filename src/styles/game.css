@@ -155,7 +155,10 @@
   border-radius: 12px; padding: 20px; display: flex; flex-direction: column;
 }
 
-.history-scroll-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; max-height: 300px; }
+.history-scroll-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; max-height: 300px; padding-right: 5px; }
+.history-scroll-area::-webkit-scrollbar { width: 6px; }
+.history-scroll-area::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+.history-scroll-area::-webkit-scrollbar-thumb { background: var(--gold-secondary); border-radius: 4px; }
 @media (min-width: 768px) { .history-scroll-area { max-height: none; } }
 
 .history-item {
