@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>레지스탕스 아발론: 온라인</title>
+  
+  <!-- Fonts: Pretendard for body, Cinzel for title -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Markdown Parser for History View -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/src/styles/main.css">
+  <link rel="stylesheet" href="/src/styles/game.css">
+</head>
+<body class="dark-theme">
+  <!-- Background Effect -->
+  <div class="bg-overlay"></div>
+  
+  <div id="app" class="app-container">
+    <header class="app-header">
+      <div class="logo">
+        <span class="shield-icon">🛡️</span>
+        <h1 class="game-title">AVALON</h1>
+      </div>
+      <div id="header-status" class="header-status">
+        <span class="header-phase-pill">로딩 중...</span>
+      </div>
+    </header>
+
+    <main id="view-container" class="view-container">
+      <!-- Views will be dynamically injected here by main.js -->
+    </main>
+  </div>
+
+  <!-- Global Modal for Admin Password / Alerts -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Version Watermark -->
+  <div id="versionWatermark">v2.0 (Vite)</div>
+
+  <!-- Entry Script -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
