@@ -5,6 +5,10 @@
 기존의 Vanilla JS(단일 파일) 구조에서 벗어나 **Vite 빌드 도구를 활용한 모듈형 아키텍처**로 재탄생했습니다. 별도의 서버 구축 없이 Firebase Realtime Database를 활용하여 플레이어 간의 상태 동기화와 게임 로직을 순수 클라이언트 환경에서 처리합니다.
 
 ---
+## 🚩 실행 (Play)
+[https://avalonkr.github.io/avalon_new/](https://avalonkr.github.io/avalon_new/)
+
+---
 
 ## 🎲 주요 업데이트 내역 (v2.0 리엔지니어링)
 
