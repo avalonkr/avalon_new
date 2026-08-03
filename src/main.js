@@ -173,6 +173,9 @@ function renderLobby() {
           appState.historyItems = entries;
         }
         refreshHistoryView(true);
+      } catch (err) {
+        console.error("Failed to fetch history:", err);
+        alert("게임 기록을 불러오는 중 오류가 발생했습니다: " + err.message);
       } finally {
         appState.isLoadingHistory = false;
       }
