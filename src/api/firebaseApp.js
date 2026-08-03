@@ -67,7 +67,11 @@ class FirebaseAPI {
   async verifyAdmin(adminKey) {
     try {
       const testRef = ref(this.db, `rooms/admin_test_${Date.now()}`);
-      await set(testRef, { adminKey: adminKey, gameState: 'test' });
+      await set(testRef, {
+        createdAt: serverTimestamp(),
+        adminKey: adminKey,
+        gameState: 'lobby'
+      });
       await set(testRef, null);
       return true;
     } catch (error) {
