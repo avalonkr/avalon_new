@@ -9,8 +9,8 @@ export function renderHistoryView(container, historyItems, callbacks) {
     `;
   };
 
-  const bindEventsToItems = (items) => {
-    items.forEach(item => {
+  const bindEventsToItems = (rootElement) => {
+    rootElement.querySelectorAll('.history-item').forEach(item => {
       item.addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-btn')) return; // 삭제 버튼
         
@@ -33,7 +33,7 @@ export function renderHistoryView(container, historyItems, callbacks) {
       });
     });
 
-    items.querySelectorAll('.delete-btn').forEach(btn => {
+    rootElement.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         if(confirm('이 기록을 삭제하시겠습니까?')) {
           callbacks.onDelete(e.target.dataset.id);
