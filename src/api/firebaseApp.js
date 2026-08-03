@@ -64,6 +64,17 @@ class FirebaseAPI {
     }
   }
 
+  async verifyAdmin(adminKey) {
+    try {
+      const testRef = ref(this.db, `rooms/admin_test_${Date.now()}`);
+      await set(testRef, { adminKey: adminKey, gameState: 'test' });
+      await set(testRef, null);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   async joinRoom(roomId, userId, nickname) {
     const playerRef = ref(this.db, `rooms/${roomId}/players/${userId}`);
     await update(playerRef, {

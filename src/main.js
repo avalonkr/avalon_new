@@ -115,49 +115,72 @@ function renderLobby() {
         }
       };
     },
-    onOpenHistory: async () => {
-      appState.view = 'history';
-      updateHeader();
+    onOpenHistory: () => {
+      modalBody.innerHTML = `
+        <h3 style="color: var(--gold-primary); margin-top:0;">게임 기록 조회 권한</h3>
+        <p style="font-size: 0.9rem; margin-bottom: 15px;">관리자 비밀번호를 입력하세요.</p>
+        <input type="password" id="historyPwd" class="input-modern" style="text-align: center; letter-spacing: 5px;">
+        <div class="action-row" style="margin-top: 15px;">
+          <button id="btnConfirmHistoryPwd" class="btn-primary">확인</button>
+          <button id="btnCancelHistoryPwd" class="btn-danger">취소</button>
+        </div>
+      `;
+      modalOverlay.classList.remove('hidden');
       
-      appState.historyItems = [];
-      appState.historyLastKey = null;
-      appState.hasMoreHistory = true;
-      appState.isLoadingHistory = false;
+      document.getElementById('btnCancelHistoryPwd').onclick = () => modalOverlay.classList.add('hidden');
+      document.getElementById('btnConfirmHistoryPwd').onclick = async () => {
+        const pwd = document.getElementById('historyPwd').value;
+        const isValid = await api.verifyAdmin(pwd);
+        
+        if (!isValid) {
+          alert("비밀번호가 일치하지 않습니다.");
+          return;
+        }
+        
+        modalOverlay.classList.add('hidden');
+        
+        appState.view = 'history';
+        updateHeader();
+        
+        appState.historyItems = [];
+        appState.historyLastKey = null;
+        appState.hasMoreHistory = true;
+        appState.isLoadingHistory = false;
 
-      const refreshHistoryView = (isInitial = false) => {
-        if (appState.view !== 'history') return;
-        renderHistoryView(viewContainer, appState.historyItems, {
-          onClose: () => { appState.historyItems = []; renderLobby(); },
-          onDelete: async (id) => {
-            await api.deleteGameHistory(id);
-            appState.historyItems = appState.historyItems.filter(([key]) => key !== id);
-            refreshHistoryView(true); // 재렌더링
-          },
-          onLoadMore: async () => {
-            if (appState.isLoadingHistory || !appState.hasMoreHistory) return;
-            appState.isLoadingHistory = true;
-            try {
-              const data = await api.fetchHistoryPage(10, appState.historyLastKey);
-              let entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
-              if (appState.historyLastKey) {
-                entries = entries.filter(([key]) => key !== appState.historyLastKey);
+        const refreshHistoryView = (isInitial = false) => {
+          if (appState.view !== 'history') return;
+          renderHistoryView(viewContainer, appState.historyItems, {
+            onClose: () => { appState.historyItems = []; renderLobby(); },
+            onDelete: async (id) => {
+              await api.deleteGameHistory(id);
+              appState.historyItems = appState.historyItems.filter(([key]) => key !== id);
+              refreshHistoryView(true); // 재렌더링
+            },
+            onLoadMore: async () => {
+              if (appState.isLoadingHistory || !appState.hasMoreHistory) return;
+              appState.isLoadingHistory = true;
+              try {
+                const data = await api.fetchHistoryPage(10, appState.historyLastKey);
+                let entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+                if (appState.historyLastKey) {
+                  entries = entries.filter(([key]) => key !== appState.historyLastKey);
+                }
+                if (entries.length === 0) {
+                  appState.hasMoreHistory = false;
+                } else {
+                  entries.reverse(); // 내림차순 (최신순)
+                  appState.historyLastKey = entries[entries.length - 1][0];
+                  appState.historyItems.push(...entries);
+                }
+                refreshHistoryView(false); // isInitial = false (추가 렌더링)
+              } finally {
+                appState.isLoadingHistory = false;
               }
-              if (entries.length === 0) {
-                appState.hasMoreHistory = false;
-              } else {
-                entries.reverse(); // 내림차순 (최신순)
-                appState.historyLastKey = entries[entries.length - 1][0];
-                appState.historyItems.push(...entries);
-              }
-              refreshHistoryView(false); // isInitial = false (추가 렌더링)
-            } finally {
-              appState.isLoadingHistory = false;
-            }
-          },
-          hasMore: appState.hasMoreHistory,
-          isInitial: isInitial
-        });
-      };
+            },
+            hasMore: appState.hasMoreHistory,
+            isInitial: isInitial
+          });
+        };
 
       appState.isLoadingHistory = true;
       // 처음에 로딩 표시를 위해 빈 상태로 렌더링
@@ -179,6 +202,7 @@ function renderLobby() {
       } finally {
         appState.isLoadingHistory = false;
       }
+      };
     }
   });
 }
