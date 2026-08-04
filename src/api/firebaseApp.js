@@ -65,26 +65,10 @@ class FirebaseAPI {
   }
 
   async verifyAdmin(adminKey) {
-    try {
-      let testRoomId;
-      let isUnique = false;
-      while (!isUnique) {
-        testRoomId = Math.floor(1000 + Math.random() * 9000).toString();
-        const snapshot = await get(ref(this.db, `rooms/${testRoomId}`));
-        if (!snapshot.exists()) isUnique = true;
-      }
-
-      const testRef = ref(this.db, `rooms/${testRoomId}`);
-      await set(testRef, {
-        createdAt: serverTimestamp(),
-        adminKey: adminKey,
-        gameState: 'lobby'
-      });
-      await set(testRef, null);
-      return true;
-    } catch (error) {
-      return false;
-    }
+    // 파이어베이스 보안 규칙에 의해 방 삭제가 24시간 이후에만 가능하므로,
+    // 더미 방을 만들고 지우는 방식은 DB에 쓰레기 데이터를 남기게 됩니다.
+    // 보안 규칙에 하드코딩된 비밀번호와 직접 대조하여 검증합니다.
+    return adminKey === 'dkqkffhs4028@';
   }
 
   async joinRoom(roomId, userId, nickname) {
