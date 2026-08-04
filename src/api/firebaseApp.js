@@ -66,7 +66,15 @@ class FirebaseAPI {
 
   async verifyAdmin(adminKey) {
     try {
-      const testRef = ref(this.db, `rooms/admin_test_${Date.now()}`);
+      let testRoomId;
+      let isUnique = false;
+      while (!isUnique) {
+        testRoomId = Math.floor(1000 + Math.random() * 9000).toString();
+        const snapshot = await get(ref(this.db, `rooms/${testRoomId}`));
+        if (!snapshot.exists()) isUnique = true;
+      }
+
+      const testRef = ref(this.db, `rooms/${testRoomId}`);
       await set(testRef, {
         createdAt: serverTimestamp(),
         adminKey: adminKey,
