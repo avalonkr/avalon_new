@@ -93,6 +93,13 @@ function renderLobby() {
         </div>
       `;
       modalOverlay.classList.remove('hidden');
+      
+      const pwdInput = document.getElementById('adminPwd');
+      pwdInput.focus();
+      pwdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') document.getElementById('btnConfirmPwd').click();
+      });
+
       document.getElementById('btnCancelPwd').onclick = () => modalOverlay.classList.add('hidden');
       document.getElementById('btnConfirmPwd').onclick = async () => {
         const pwd = document.getElementById('adminPwd').value;
@@ -126,6 +133,12 @@ function renderLobby() {
         </div>
       `;
       modalOverlay.classList.remove('hidden');
+      
+      const historyPwdInput = document.getElementById('historyPwd');
+      historyPwdInput.focus();
+      historyPwdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') document.getElementById('btnConfirmHistoryPwd').click();
+      });
       
       document.getElementById('btnCancelHistoryPwd').onclick = () => modalOverlay.classList.add('hidden');
       document.getElementById('btnConfirmHistoryPwd').onclick = async () => {
