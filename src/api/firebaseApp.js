@@ -65,16 +65,29 @@ class FirebaseAPI {
   }
 
   async verifyAdmin(adminKey) {
-    // 보안을 위해 평문 비밀번호를 코드에 노출하지 않고 SHA-256 해시값으로 검증합니다.
+    // 프론트엔드 코드에 비밀번호나 해시를 전혀 남기지 않고,
+    // 오직 파이어베이스 보안 규칙에 100% 의존하여 검증하는 방식입니다.
     try {
-      const msgBuffer = new TextEncoder().encode(adminKey);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      
-      // 관리자 비밀번호의 해시값
-      return hashHex === 'ea13e8cb4bea07baacac7ce375170b4c800efa319648d1586b4b56e0bca9c59f';
-    } catch (e) {
+      let testRoomId;
+      let isUnique = false;
+      while (!isUnique) {
+        testRoomId = Math.floor(1000 + Math.random() * 9000).toString();
+        const snapshot = await get(ref(this.db, `rooms/${testRoomId}`));
+        if (!snapshot.exists()) isUnique = true;
+      }
+
+      // 파이어베이스 보안 규칙에 의해 비밀번호가 틀리면 여기서 에러가 발생하여 catch로 넘어갑니다.
+      const testRef = ref(this.db, `rooms/${testRoomId}`);
+      await set(testRef, {
+        createdAt: serverTimestamp(),
+        adminKey: adminKey,
+        gameState: 'dummy_test' // 가짜 방임을 표시
+      });
+
+      // 24시간 내 삭제 금지 규칙 때문에 즉시 지우지 않고 그대로 둡니다.
+      // 남겨진 더미 방은 앱 실행 시 자동으로 작동하는 cleanupOldRooms()에 의해 24시간 뒤 깔끔하게 청소됩니다.
+      return true;
+    } catch (error) {
       return false;
     }
   }
