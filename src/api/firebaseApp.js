@@ -65,10 +65,18 @@ class FirebaseAPI {
   }
 
   async verifyAdmin(adminKey) {
-    // 파이어베이스 보안 규칙에 의해 방 삭제가 24시간 이후에만 가능하므로,
-    // 더미 방을 만들고 지우는 방식은 DB에 쓰레기 데이터를 남기게 됩니다.
-    // 보안 규칙에 하드코딩된 비밀번호와 직접 대조하여 검증합니다.
-    return adminKey === 'dkqkffhs4028@';
+    // 보안을 위해 평문 비밀번호를 코드에 노출하지 않고 SHA-256 해시값으로 검증합니다.
+    try {
+      const msgBuffer = new TextEncoder().encode(adminKey);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // 관리자 비밀번호의 해시값
+      return hashHex === 'ea13e8cb4bea07baacac7ce375170b4c800efa319648d1586b4b56e0bca9c59f';
+    } catch (e) {
+      return false;
+    }
   }
 
   async joinRoom(roomId, userId, nickname) {
