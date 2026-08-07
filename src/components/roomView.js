@@ -47,6 +47,7 @@ export function renderRoomView(container, roomId, myUserId, playersData, isHost,
         <div class="room-actions">
           <button id="toggleReadyBtn" class="btn-large"></button>
           ${isHost ? `<button id="startGameBtn" class="btn-large btn-accent" style="margin-top: 10px;" disabled></button>` : ''}
+          ${isHost ? `<button id="resetRoomBtn" class="btn-large btn-danger" style="margin-top: 10px;">방 초기화</button>` : ''}
         </div>
       </div>
     `;
@@ -68,6 +69,15 @@ export function renderRoomView(container, roomId, myUserId, playersData, isHost,
   readyBtn.onclick = () => callbacks.onToggleReady(!me.isReady);
 
   if (isHost) {
+    const resetBtn = document.getElementById('resetRoomBtn');
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        if (confirm("방 데이터를 초기화하시겠습니까? (모든 플레이어의 준비 상태와 게임 데이터가 삭제됩니다)")) {
+          callbacks.onResetRoom();
+        }
+      };
+    }
+    
     document.getElementById('hostRecText').innerText = `참여 인원(${playerCount}명)에 따라 권장 직업이 달라집니다.`;
     document.getElementById('recP').style.display = playerCount >= 5 ? 'inline-block' : 'none';
     document.getElementById('recM').style.display = playerCount >= 5 ? 'inline-block' : 'none';

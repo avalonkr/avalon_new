@@ -231,13 +231,34 @@ function startRoomSync() {
   }, 2500);
 
   api.subscribeToHost(appState.roomId, (hostId) => {
+    appState.currentHostId = hostId;
     appState.isHost = hostId === appState.myUserId;
     refreshCurrentView();
   });
 
   api.subscribeToPlayers(appState.roomId, (players) => {
-    appState.playersData = players || {};
-    api.claimHost(appState.roomId, appState.playersData.host, appState.myUserId, appState.playersData);
+    const oldPlayers = appState.playersData || {};
+    const newPlayers = players || {};
+    
+    let changed = false;
+    const oldKeys = Object.keys(oldPlayers);
+    const newKeys = Object.keys(newPlayers);
+    if (oldKeys.length !== newKeys.length) changed = true;
+    else {
+      for (const key of newKeys) {
+        if (!oldPlayers[key] ||
+            oldPlayers[key].isOnline !== newPlayers[key].isOnline ||
+            oldPlayers[key].isReady !== newPlayers[key].isReady ||
+            oldPlayers[key].role !== newPlayers[key].role ||
+            oldPlayers[key].nickname !== newPlayers[key].nickname) {
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    appState.playersData = newPlayers;
+    api.claimHost(appState.roomId, appState.currentHostId, appState.myUserId, appState.playersData);
     
     // 만약 내가 방에서 튕겼다면 로비로 쫓겨남
     if (!appState.playersData[appState.myUserId]) {
@@ -246,7 +267,10 @@ function startRoomSync() {
       renderLobby();
       return;
     }
-    refreshCurrentView();
+    
+    if (changed) {
+      refreshCurrentView();
+    }
   });
 
   api.subscribeToGameState(appState.roomId, (state) => {
@@ -254,9 +278,7 @@ function startRoomSync() {
     appState.gameState = state;
     appState.view = state === 'lobby' ? 'room' : 'game';
     
-    if (state === 'game_over' && appState.isHost && appState.playData && !appState.playData.historySaved) {
-      handleGameOver();
-    }
+    checkAndSaveHistory();
     
     updateHeader();
     refreshCurrentView();
@@ -281,14 +303,35 @@ function startRoomSync() {
         setTimeout(() => processQuestVotes(), 1000);
       }
     }
+    checkAndSaveHistory();
     refreshCurrentView();
   });
+}
+
+function checkAndSaveHistory() {
+  if (appState.gameState === 'game_over' && appState.isHost && appState.playData && !appState.playData.historySaved) {
+    const succCount = (appState.playData.questResults || []).filter(r => r === 'success').length;
+    // 선팀이 3번 성공하여 암살 단계로 넘어간 경우, 암살 내역(assassinatedTarget)이 확실히 도착할 때까지 대기
+    if (succCount >= 3 && !appState.playData.assassinatedTarget) {
+      return; 
+    }
+    handleGameOver();
+  }
 }
 
 function refreshCurrentView() {
   if (appState.view === 'room') {
     renderRoomView(viewContainer, appState.roomId, appState.myUserId, appState.playersData, appState.isHost, {
       onToggleReady: (val) => api.setPlayerReady(appState.roomId, appState.myUserId, val),
+      onResetRoom: async () => {
+        const playerIds = Object.keys(appState.playersData);
+        for (let id of playerIds) {
+          await api.setPlayerReady(appState.roomId, id, false);
+        }
+        await api.updateRoot({
+          [`rooms/${appState.roomId}/playData`]: null
+        });
+      },
       onStartGame: async (options) => {
         const playerIds = Object.keys(appState.playersData).filter(id => appState.playersData[id].isOnline !== false);
         const playerCount = playerIds.length;
