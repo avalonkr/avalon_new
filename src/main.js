@@ -3,7 +3,7 @@ import { generateRoles, initializePlayData, calculateTeamVoteResult, calculateQu
 import { ALIGNMENT_RATIO, ROLES } from './logic/constants.js';
 import { generateMarkdownHistory } from './logic/markdownGen.js';
 import * as cryptoUtils from './logic/crypto.js';
-
+import { GameController } from './logic/GameController.js';
 import { renderLobbyView } from './components/lobbyView.js';
 import { renderHistoryView } from './components/historyView.js';
 import { renderRoomView } from './components/roomView.js';
@@ -27,9 +27,12 @@ let appState = {
   cryptoKeyPair: null,
 
   historyLastKey: null,
+  historyLastKey: null,
   hasMoreHistory: true,
   isLoadingHistory: false
 };
+
+const gameController = new GameController(api, () => appState);
 
 let isProcessingTransition = false;
 let heartbeatInterval = null;
@@ -315,15 +318,21 @@ function startRoomSync() {
       
       if (pData.confirmations && Object.keys(pData.confirmations).length === total) {
         isProcessingTransition = true;
-        setTimeout(() => handlePhaseTransition(appState.gameState, pData), 1000);
+        setTimeout(() => {
+          gameController.handlePhaseTransition(appState.gameState, pData).then(() => isProcessingTransition = false);
+        }, 1000);
       }
       else if (appState.gameState === 'team_voting' && pData.votes && Object.keys(pData.votes).length === total) {
         isProcessingTransition = true;
-        setTimeout(() => processTeamVotes(), 500);
+        setTimeout(() => {
+          gameController.processTeamVotes().then(() => isProcessingTransition = false);
+        }, 500);
       }
       else if (appState.gameState === 'quest_voting' && pData.questVotes && pData.proposedTeam && Object.keys(pData.questVotes).length === pData.proposedTeam.length) {
         isProcessingTransition = true;
-        setTimeout(() => processQuestVotes(), 1000);
+        setTimeout(() => {
+          gameController.processQuestVotes().then(() => isProcessingTransition = false);
+        }, 1000);
       }
     }
     checkAndSaveHistory();
@@ -338,7 +347,7 @@ function checkAndSaveHistory() {
     if (succCount >= 3 && !appState.playData.assassinatedTarget) {
       return; 
     }
-    handleGameOver();
+    gameController.handleGameOver();
   }
 }
 
@@ -356,88 +365,7 @@ function refreshCurrentView() {
         });
       },
       onStartGame: async (options) => {
-        const playerIds = Object.keys(appState.playersData).filter(id => appState.playersData[id].isOnline !== false);
-        const playerCount = playerIds.length;
-        
-        // 정원 초과 검증
-        const ratio = ALIGNMENT_RATIO[playerCount];
-        const selectedEvilCount = (options.morgana ? 1 : 0) + (options.mordred ? 1 : 0) + (options.oberon ? 1 : 0) + 1; // 1은 필수 암살자
-        const selectedGoodCount = (options.percival ? 1 : 0) + 1; // 1은 필수 멀린
-        
-        if (selectedEvilCount > ratio.evil) {
-          alert(`직업 설정 오류: ${playerCount}인 게임의 악의 세력 정원은 ${ratio.evil}명입니다.\n(기본 암살자 포함 ${selectedEvilCount}명 선택됨)\n특수 직업을 줄여주세요.`);
-          return;
-        }
-        if (selectedGoodCount > ratio.good) {
-          alert(`직업 설정 오류: ${playerCount}인 게임의 선의 세력 정원은 ${ratio.good}명입니다.\n(기본 멀린 포함 ${selectedGoodCount}명 선택됨)\n특수 직업을 줄여주세요.`);
-          return;
-        }
-
-        const roles = generateRoles(playerCount, options);
-        
-        for (let i=0; i<playerIds.length; i++) {
-          await api.updateHeartbeat(appState.roomId, playerIds[i]); // 살려두기
-          api.db && await api.updateHeartbeat(appState.roomId, playerIds[i]);
-          // TODO : update player role securely
-          delete appState.playersData[playerIds[i]].role; // Remove plaintext role
-          await api.setPlayerReady(appState.roomId, playerIds[i], false); // reset ready
-        }
-        
-        // Roles 업데이트 (E2EE 암호화 적용)
-        const updates = {};
-        const hostEncryptedRoles = {};
-        
-        for (let i = 0; i < playerIds.length; i++) {
-          const pId = playerIds[i];
-          const role = roles[i];
-          
-          // 각 플레이어별 기밀 정보 계산
-          let secretList = [];
-          const isEvil = [ROLES.ASSASSIN, ROLES.MORGANA, ROLES.MODRED, ROLES.OBERON, ROLES.MINION].includes(role);
-          
-          for (let j = 0; j < playerIds.length; j++) {
-            if (i === j) continue;
-            const targetId = playerIds[j];
-            const targetRole = roles[j];
-            const targetP = appState.playersData[targetId];
-            const targetIsEvil = [ROLES.ASSASSIN, ROLES.MORGANA, ROLES.MODRED, ROLES.OBERON, ROLES.MINION].includes(targetRole);
-            
-            if (role === ROLES.MERLIN) {
-              if (targetIsEvil && targetRole !== ROLES.MODRED) secretList.push(`😈 <b>${targetP.nickname}</b> (악)`);
-            } else if (role === ROLES.PERCIVAL) {
-              if (targetRole === ROLES.MERLIN || targetRole === ROLES.MORGANA) secretList.push(`🧙‍♂️ <b>${targetP.nickname}</b> (멀린 또는 모르가나)`);
-            } else if (isEvil && role !== ROLES.OBERON) {
-              if (targetIsEvil && targetRole !== ROLES.OBERON) secretList.push(`🤝 <b>${targetP.nickname}</b> (같은 편)`);
-            }
-          }
-          
-          const payload = { role, secretList };
-          
-          // 플레이어의 공개키로 암호화
-          const pubKeyPem = appState.playersData[pId].publicKey;
-          if (pubKeyPem) {
-            const encryptedPayload = await cryptoUtils.encryptData(pubKeyPem, payload);
-            updates[`rooms/${appState.roomId}/players/${pId}/encryptedRole`] = encryptedPayload;
-          }
-          
-          // 방장의 백업용 (나중에 게임 기록용)
-          hostEncryptedRoles[pId] = role;
-        }
-        
-        // 방장의 공개키로 전체 직업을 암호화하여 저장
-        if (appState.cryptoKeyPair) {
-          const myPubKeyPem = await cryptoUtils.exportPublicKey(appState.cryptoKeyPair.publicKey);
-          const hostBackup = await cryptoUtils.encryptData(myPubKeyPem, hostEncryptedRoles);
-          updates[`rooms/${appState.roomId}/playData/hostBackupRoles`] = hostBackup;
-        }
-        
-        const newPlayData = initializePlayData(playerIds);
-        
-        if (api.db) {
-          await api.updateRoot(updates);
-        }
-        await api.overwritePlayData(appState.roomId, newPlayData);
-        await api.updateGameState(appState.roomId, 'team_selection');
+        await gameController.startGame(options);
       }
     });
   } else if (appState.view === 'game') {
@@ -478,115 +406,8 @@ function refreshCurrentView() {
 
 // ========================
 // State Transitions (Host Only)
+// (Moved to GameController.js)
 // ========================
-
-async function processTeamVotes() {
-  const pData = appState.playData;
-  const result = calculateTeamVoteResult(pData.votes);
-  
-  const tlItem = { type: 'team_voted', passed: result.passed, approve: result.approve, reject: result.reject, votes: pData.votes };
-  const tl = [...(pData.timeline || []), tlItem];
-  
-  const updates = { lastVoteResult: result, confirmations: {}, timeline: tl };
-  if (!result.passed) {
-    updates.voteTrack = (pData.voteTrack || 0) + 1;
-  }
-  
-  await api.updatePlayData(appState.roomId, updates);
-  await api.updateGameState(appState.roomId, 'vote_result');
-  isProcessingTransition = false;
-}
-
-async function processQuestVotes() {
-  const pData = appState.playData;
-  const result = calculateQuestResult(Object.values(pData.questVotes), pData.currentQuest, pData.playerOrder.length);
-  
-  const qResults = [...(pData.questResults || [])];
-  const qDetails = [...(pData.questDetails || [])];
-  
-  qResults.push(result.successStatus);
-  qDetails.push({ s: result.successCount, f: result.failCount });
-  
-  const tlItem = { type: 'quest_result', result: result.successStatus, successCount: result.successCount, failCount: result.failCount };
-  const tl = [...(pData.timeline || []), tlItem];
-  
-  await api.updatePlayData(appState.roomId, {
-    lastQuestResult: result, confirmations: {},
-    questResults: qResults, questDetails: qDetails,
-    timeline: tl
-  });
-  await api.updateGameState(appState.roomId, 'quest_result');
-  isProcessingTransition = false;
-}
-
-async function handlePhaseTransition(currentState, pData) {
-  if (currentState === 'vote_result') {
-    if (pData.lastVoteResult.passed) {
-      await api.updatePlayData(appState.roomId, { questVotes: null, confirmations: null });
-      await api.updateGameState(appState.roomId, 'quest_voting');
-    } else {
-      if (pData.voteTrack >= 5) {
-        await api.updateGameState(appState.roomId, 'game_over');
-      } else {
-        const nextLeader = (pData.leaderIndex + 1) % pData.playerOrder.length;
-        await api.updatePlayData(appState.roomId, { leaderIndex: nextLeader, proposedTeam: null, votes: null, confirmations: null });
-        await api.updateGameState(appState.roomId, 'team_selection');
-      }
-    }
-  } else if (currentState === 'quest_result') {
-    const failsCount = (pData.questResults || []).filter(r => r === 'fail').length;
-    const succCount = (pData.questResults || []).filter(r => r === 'success').length;
-    
-    if (failsCount >= 3) {
-      await api.updateGameState(appState.roomId, 'game_over');
-    } else if (succCount >= 3) {
-      await api.updateGameState(appState.roomId, 'assassin_phase');
-    } else {
-      const nextLeader = (pData.leaderIndex + 1) % pData.playerOrder.length;
-      await api.updatePlayData(appState.roomId, {
-        currentQuest: pData.currentQuest + 1,
-        leaderIndex: nextLeader,
-        voteTrack: 0,
-        proposedTeam: null, votes: null, questVotes: null, confirmations: null
-      });
-      
-      const tlItem = { type: 'quest_start', round: pData.currentQuest + 2 };
-      await api.updatePlayData(appState.roomId, { timeline: [...(pData.timeline||[]), tlItem] });
-      await api.updateGameState(appState.roomId, 'team_selection');
-    }
-  }
-  isProcessingTransition = false;
-}
-
-async function handleGameOver() {
-  if (appState.playData && appState.playData.historySaved) return;
-  
-  let rolesForHistory = {};
-  if (appState.playData.hostBackupRoles && appState.cryptoKeyPair) {
-    const decrypted = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, appState.playData.hostBackupRoles);
-    if (decrypted) {
-      rolesForHistory = decrypted;
-    }
-  }
-
-  // Generate markdown requires playersData to have 'role' property
-  const fakePlayersData = JSON.parse(JSON.stringify(appState.playersData));
-  for (const pId in fakePlayersData) {
-    if (rolesForHistory[pId]) fakePlayersData[pId].role = rolesForHistory[pId];
-    else fakePlayersData[pId].role = '??? (복호화 불가)';
-  }
-
-  const md = generateMarkdownHistory(appState.roomId, fakePlayersData, appState.playData);
-  const now = new Date();
-  
-  await api.saveGameHistory({
-    roomId: appState.roomId,
-    date: now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR'),
-    markdown: md
-  });
-  
-  await api.updatePlayData(appState.roomId, { historySaved: true });
-}
 
 async function handleRestart() {
   appState.myDecryptedRole = null;
