@@ -106,7 +106,26 @@ export class GameController {
   async processQuestVotes() {
     const appState = this.getAppState();
     const pData = appState.playData;
-    const result = calculateQuestResult(Object.values(pData.questVotes), pData.currentQuest, pData.playerOrder.length);
+    
+    const decryptedVotesObj = {};
+    const rawVotes = [];
+    if (appState.cryptoKeyPair) {
+      for (const [vId, encVote] of Object.entries(pData.questVotes || {})) {
+        if (typeof encVote === 'object' && encVote.encryptedAesKey) {
+          const decryptedVoteStr = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, encVote);
+          if (decryptedVoteStr) {
+            decryptedVotesObj[vId] = decryptedVoteStr;
+            rawVotes.push(decryptedVoteStr);
+          }
+        } else {
+          // Fallback for legacy plaintext games
+          decryptedVotesObj[vId] = encVote;
+          rawVotes.push(encVote);
+        }
+      }
+    }
+    
+    const result = calculateQuestResult(rawVotes, pData.currentQuest, pData.playerOrder.length);
     
     const qResults = [...(pData.questResults || [])];
     const qDetails = [...(pData.questDetails || [])];
@@ -188,7 +207,27 @@ export class GameController {
       else fakePlayersData[pId].role = '??? (복호화 불가)';
     }
 
-    const md = generateMarkdownHistory(appState.roomId, fakePlayersData, appState.playData);
+    const fakePlayData = JSON.parse(JSON.stringify(appState.playData));
+    const decryptedTimeline = fakePlayData.timeline || [];
+    if (appState.cryptoKeyPair) {
+      for (let evt of decryptedTimeline) {
+        if (evt.type === 'quest_result' && evt.questVotes) {
+          const decryptedQVotes = {};
+          for (const [vId, encVote] of Object.entries(evt.questVotes)) {
+            if (typeof encVote === 'object' && encVote.encryptedAesKey) {
+              const dVote = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, encVote);
+              if (dVote) decryptedQVotes[vId] = dVote;
+            } else {
+              decryptedQVotes[vId] = encVote;
+            }
+          }
+          evt.questVotes = decryptedQVotes;
+        }
+      }
+    }
+    fakePlayData.timeline = decryptedTimeline;
+
+    const md = generateMarkdownHistory(appState.roomId, fakePlayersData, fakePlayData);
     const now = new Date();
     
     await this.api.saveGameHistory({

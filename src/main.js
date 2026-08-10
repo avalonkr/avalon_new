@@ -379,8 +379,12 @@ function refreshCurrentView() {
       onTeamVote: (voteStr) => {
         api.updatePlayData(appState.roomId, { [`votes/${appState.myUserId}`]: voteStr });
       },
-      onQuestVote: (voteStr) => {
-        api.updatePlayData(appState.roomId, { [`questVotes/${appState.myUserId}`]: voteStr });
+      onQuestVote: async (voteStr) => {
+        const hostPubKey = appState.playersData[appState.currentHostId]?.publicKey;
+        if (hostPubKey) {
+          const encVote = await cryptoUtils.encryptData(hostPubKey, voteStr);
+          api.updatePlayData(appState.roomId, { [`questVotes/${appState.myUserId}`]: encVote });
+        }
       },
       onConfirmResult: () => {
         api.submitConfirmation(appState.roomId, appState.myUserId);
