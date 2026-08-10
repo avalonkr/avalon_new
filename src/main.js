@@ -380,10 +380,17 @@ function refreshCurrentView() {
         api.updatePlayData(appState.roomId, { [`votes/${appState.myUserId}`]: voteStr });
       },
       onQuestVote: async (voteStr) => {
-        const hostPubKey = appState.playersData[appState.currentHostId]?.publicKey;
-        if (hostPubKey) {
-          const encVote = await cryptoUtils.encryptData(hostPubKey, voteStr);
+        const roomPubKey = appState.playData?.roomPublicKey;
+        if (roomPubKey) {
+          const encVote = await cryptoUtils.encryptData(roomPubKey, voteStr);
           api.updatePlayData(appState.roomId, { [`questVotes/${appState.myUserId}`]: encVote });
+        } else {
+          // Fallback if no roomPublicKey (legacy)
+          const hostPubKey = appState.playersData[appState.currentHostId]?.publicKey;
+          if (hostPubKey) {
+            const encVote = await cryptoUtils.encryptData(hostPubKey, voteStr);
+            api.updatePlayData(appState.roomId, { [`questVotes/${appState.myUserId}`]: encVote });
+          }
         }
       },
       onConfirmResult: () => {

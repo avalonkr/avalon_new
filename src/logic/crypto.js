@@ -40,6 +40,30 @@ export async function importPublicKey(pemString) {
   );
 }
 
+// 3-1. 개인키를 Base64 문자열로 내보내기 (Firebase 저장용 - 방 공용키 전용)
+export async function exportPrivateKey(privateKey) {
+  const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
+  const exportedAsString = String.fromCharCode.apply(null, new Uint8Array(exported));
+  return btoa(exportedAsString);
+}
+
+// 3-2. Base64 문자열에서 개인키 객체로 가져오기
+export async function importPrivateKey(pemString) {
+  const binaryDerString = atob(pemString);
+  const binaryDer = new Uint8Array(binaryDerString.length);
+  for (let i = 0; i < binaryDerString.length; i++) {
+    binaryDer[i] = binaryDerString.charCodeAt(i);
+  }
+
+  return await crypto.subtle.importKey(
+    'pkcs8',
+    binaryDer.buffer,
+    { name: 'RSA-OAEP', hash: 'SHA-256' },
+    true,
+    ['decrypt']
+  );
+}
+
 // 4. 데이터를 Base64로 인코딩하는 헬퍼
 function arrayBufferToBase64(buffer) {
   let binary = '';

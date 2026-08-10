@@ -73,11 +73,15 @@ export class GameController {
     
     const newPlayData = initializePlayData(playerIds);
     
-    if (appState.cryptoKeyPair) {
-      const myPubKeyPem = await cryptoUtils.exportPublicKey(appState.cryptoKeyPair.publicKey);
-      const hostBackup = await cryptoUtils.encryptData(myPubKeyPem, hostEncryptedRoles);
-      newPlayData.hostBackupRoles = hostBackup;
-    }
+    const roomKeyPair = await cryptoUtils.generateKeyPair();
+    const roomPubKeyPem = await cryptoUtils.exportPublicKey(roomKeyPair.publicKey);
+    const roomPrivKeyPem = await cryptoUtils.exportPrivateKey(roomKeyPair.privateKey);
+    
+    newPlayData.roomPublicKey = roomPubKeyPem;
+    newPlayData.roomPrivateKey = roomPrivKeyPem;
+    
+    const hostBackup = await cryptoUtils.encryptData(roomPubKeyPem, hostEncryptedRoles);
+    newPlayData.hostBackupRoles = hostBackup;
     
     if (this.api.db) {
       await this.api.updateRoot(updates);
@@ -109,10 +113,11 @@ export class GameController {
     
     const decryptedVotesObj = {};
     const rawVotes = [];
-    if (appState.cryptoKeyPair) {
+    if (appState.myUserId === appState.currentHostId && pData.roomPrivateKey) {
+      const roomPrivateKeyObj = await cryptoUtils.importPrivateKey(pData.roomPrivateKey);
       for (const [vId, encVote] of Object.entries(pData.questVotes || {})) {
         if (typeof encVote === 'object' && encVote.encryptedAesKey) {
-          const decryptedVoteStr = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, encVote);
+          const decryptedVoteStr = await cryptoUtils.decryptData(roomPrivateKeyObj, encVote);
           if (decryptedVoteStr) {
             decryptedVotesObj[vId] = decryptedVoteStr;
             rawVotes.push(decryptedVoteStr);
@@ -123,6 +128,11 @@ export class GameController {
           rawVotes.push(encVote);
         }
       }
+    } else {
+       // If somehow called by non-host, just push empty/raw (should not happen)
+       for (const encVote of Object.values(pData.questVotes || {})) {
+         if (typeof encVote !== 'object') rawVotes.push(encVote);
+       }
     }
     
     const result = calculateQuestResult(rawVotes, pData.currentQuest, pData.playerOrder.length);
@@ -192,13 +202,13 @@ export class GameController {
   async handleGameOver() {
     const appState = this.getAppState();
     if (appState.playData && appState.playData.historySaved) return;
+    const pData = appState.playData;
     
     let rolesForHistory = {};
-    if (appState.playData.hostBackupRoles && appState.cryptoKeyPair) {
-      const decrypted = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, appState.playData.hostBackupRoles);
-      if (decrypted) {
-        rolesForHistory = decrypted;
-      }
+    if (appState.myUserId === appState.currentHostId && pData.hostBackupRoles && pData.roomPrivateKey) {
+      const roomPrivateKeyObj = await cryptoUtils.importPrivateKey(pData.roomPrivateKey);
+      const dec = await cryptoUtils.decryptData(roomPrivateKeyObj, pData.hostBackupRoles);
+      if (dec) rolesForHistory = dec;
     }
 
     const fakePlayersData = JSON.parse(JSON.stringify(appState.playersData));
@@ -209,13 +219,14 @@ export class GameController {
 
     const fakePlayData = JSON.parse(JSON.stringify(appState.playData));
     const decryptedTimeline = fakePlayData.timeline || [];
-    if (appState.cryptoKeyPair) {
+    if (appState.myUserId === appState.currentHostId && pData.roomPrivateKey) {
+      const roomPrivateKeyObj = await cryptoUtils.importPrivateKey(pData.roomPrivateKey);
       for (let evt of decryptedTimeline) {
         if (evt.type === 'quest_result' && evt.questVotes) {
           const decryptedQVotes = {};
           for (const [vId, encVote] of Object.entries(evt.questVotes)) {
             if (typeof encVote === 'object' && encVote.encryptedAesKey) {
-              const dVote = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, encVote);
+              const dVote = await cryptoUtils.decryptData(roomPrivateKeyObj, encVote);
               if (dVote) decryptedQVotes[vId] = dVote;
             } else {
               decryptedQVotes[vId] = encVote;
