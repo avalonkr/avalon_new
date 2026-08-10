@@ -25,7 +25,7 @@ export function renderHistoryView(container, historyItems, callbacks) {
         document.getElementById('historyDetailTitle').innerText = `${game.roomId}방 결과`;
         const htmlContent = document.getElementById('historyHtmlContent');
         if (window.marked) {
-          htmlContent.innerHTML = window.marked.parse(activeMarkdown);
+          htmlContent.innerHTML = window.marked.parse(activeMarkdown, { breaks: true });
         } else {
           htmlContent.innerHTML = "<p>Markdown 파서를 불러오지 못했습니다.</p>";
         }
