@@ -71,13 +71,14 @@ export class GameController {
       updates[`rooms/${appState.roomId}/players/${pId}/role`] = null; // Remove plaintext role
     }
     
+    const newPlayData = initializePlayData(playerIds);
+    
     if (appState.cryptoKeyPair) {
       const myPubKeyPem = await cryptoUtils.exportPublicKey(appState.cryptoKeyPair.publicKey);
       const hostBackup = await cryptoUtils.encryptData(myPubKeyPem, hostEncryptedRoles);
-      updates[`rooms/${appState.roomId}/playData/hostBackupRoles`] = hostBackup;
+      newPlayData.hostBackupRoles = hostBackup;
     }
     
-    const newPlayData = initializePlayData(playerIds);
     if (this.api.db) {
       await this.api.updateRoot(updates);
     }
