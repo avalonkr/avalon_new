@@ -7,7 +7,7 @@ import * as cryptoUtils from './logic/crypto.js';
 import { renderLobbyView } from './components/lobbyView.js';
 import { renderHistoryView } from './components/historyView.js';
 import { renderRoomView } from './components/roomView.js';
-import { renderGamePhase } from './components/phaseViews.js';
+import { renderGamePhase } from './components/phases/GamePhaseManager.js';
 
 const viewContainer = document.getElementById('view-container');
 const headerStatus = document.querySelector('.header-phase-pill');
