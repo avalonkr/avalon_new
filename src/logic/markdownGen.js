@@ -47,7 +47,24 @@ export function generateMarkdownHistory(roomId, playersData, playData) {
     else if (evt.type === 'quest_result') {
       const qRes = evt.result === 'success' ? "성공 🟢" : "실패 🔴";
       md += `⚔️ 임무 수행 결과: ${qRes}\n`;
-      md += `제출된 결과: (성공 ${evt.successCount} / 실패 ${evt.failCount})\n\n`;
+      
+      const successSubmitters = [];
+      const failSubmitters = [];
+      
+      if (evt.questVotes) {
+        Object.entries(evt.questVotes).forEach(([vId, v]) => {
+          const vName = playersData[vId]?.nickname + " " + getRoleTag(playersData[vId]?.role);
+          if (v === 'success') successSubmitters.push(vName);
+          else failSubmitters.push(vName);
+        });
+      }
+      
+      if (successSubmitters.length > 0 || failSubmitters.length > 0) {
+        md += `성공 제출: ${successSubmitters.length > 0 ? successSubmitters.join(', ') : '없음'}\n`;
+        md += `실패 제출: ${failSubmitters.length > 0 ? failSubmitters.join(', ') : '없음'}\n\n`;
+      } else {
+        md += `제출된 결과: (성공 ${evt.successCount} / 실패 ${evt.failCount})\n\n`;
+      }
     }
     else if (evt.type === 'assassination') {
       const assassinName = playersData[evt.assassinId]?.nickname;

@@ -114,7 +114,13 @@ export class GameController {
     qResults.push(result.successStatus);
     qDetails.push({ s: result.successCount, f: result.failCount });
     
-    const tlItem = { type: 'quest_result', result: result.successStatus, successCount: result.successCount, failCount: result.failCount };
+    const tlItem = { 
+      type: 'quest_result', 
+      result: result.successStatus, 
+      successCount: result.successCount, 
+      failCount: result.failCount,
+      questVotes: pData.questVotes 
+    };
     const tl = [...(pData.timeline || []), tlItem];
     
     await this.api.updatePlayData(appState.roomId, {
