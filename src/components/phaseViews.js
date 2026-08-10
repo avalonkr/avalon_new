@@ -1,24 +1,24 @@
 import { getRoleTag } from '../logic/gameLogic.js';
 import { ROLES, QUEST_CAPACITY } from '../logic/constants.js';
 
-export function renderGamePhase(container, gameState, playData, myUserId, playersData, isHost, callbacks) {
-  const myRole = playersData[myUserId]?.role;
+export function renderGamePhase(container, gameState, playData, myUserId, playersData, isHost, myDecryptedRole, myDecryptedSecrets, callbacks) {
+  const myRole = myDecryptedRole || playersData[myUserId]?.role || '???';
   const isPendingConfirm = playData.confirmations && !playData.confirmations[myUserId];
   const totalPlayers = playData.playerOrder.length;
 
   let content = `
     <div class="view-card game-card animate-fade-in">
-      ${renderRoleHeader(myRole, playersData, myUserId)}
+      ${renderRoleHeader(myRole, myDecryptedSecrets)}
       ${renderScoreboard(playData, totalPlayers, playersData)}
-      ${renderPhaseContent(gameState, playData, myUserId, playersData, isHost, callbacks)}
+      ${renderPhaseContent(gameState, playData, myUserId, playersData, isHost, myRole, callbacks)}
     </div>
   `;
   container.innerHTML = content;
   
-  bindPhaseEvents(gameState, playData, myUserId, playersData, isHost, callbacks);
+  bindPhaseEvents(gameState, playData, myUserId, playersData, isHost, myRole, callbacks);
 }
 
-function renderRoleHeader(myRole, playersData, myUserId) {
+function renderRoleHeader(myRole, secretList) {
   let roleDesc = "";
   let teamClass = "good-text";
   if (myRole === ROLES.MERLIN) roleDesc = "모드레드를 제외한 악을 압니다. 암살에 주의하세요.";
@@ -30,22 +30,7 @@ function renderRoleHeader(myRole, playersData, myUserId) {
   else if (myRole === ROLES.MINION) { roleDesc = "오베론 제외 악을 압니다."; teamClass = "evil-text"; }
   else roleDesc = "대화와 투표를 통해 악을 추리하세요.";
 
-  // 기밀 정보 계산
-  let secretList = [];
-  const isEvil = [ROLES.ASSASSIN, ROLES.MORGANA, ROLES.MODRED, ROLES.OBERON, ROLES.MINION].includes(myRole);
-  Object.entries(playersData).forEach(([id, p]) => {
-    if (id === myUserId) return;
-    const r = p.role;
-    const pIsEvil = [ROLES.ASSASSIN, ROLES.MORGANA, ROLES.MODRED, ROLES.OBERON, ROLES.MINION].includes(r);
-    
-    if (myRole === ROLES.MERLIN) {
-      if (pIsEvil && r !== ROLES.MODRED) secretList.push(`😈 <b>${p.nickname}</b> (악)`);
-    } else if (myRole === ROLES.PERCIVAL) {
-      if (r === ROLES.MERLIN || r === ROLES.MORGANA) secretList.push(`🧙‍♂️ <b>${p.nickname}</b> (멀린 또는 모르가나)`);
-    } else if (isEvil && myRole !== ROLES.OBERON) {
-      if (pIsEvil && r !== ROLES.OBERON) secretList.push(`🤝 <b>${p.nickname}</b> (같은 편)`);
-    }
-  });
+  const sList = secretList || [];
 
   return `
     <div class="role-summary-panel">
@@ -56,10 +41,10 @@ function renderRoleHeader(myRole, playersData, myUserId) {
       </div>
       <div id="roleDetailsArea" style="display: none;">
         <p class="role-desc">${roleDesc}</p>
-        ${secretList.length > 0 ? `
+        ${sList.length > 0 ? `
           <div class="secret-info-box">
             <h4 class="evil-text">⚠️ 기밀 정보 (시야)</h4>
-            <ul>${secretList.map(s => `<li>${s}</li>`).join('')}</ul>
+            <ul>${sList.map(s => `<li>${s}</li>`).join('')}</ul>
           </div>
         ` : ''}
       </div>

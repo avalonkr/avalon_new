@@ -2,6 +2,7 @@ import { api } from './api/firebaseApp.js';
 import { generateRoles, initializePlayData, calculateTeamVoteResult, calculateQuestResult } from './logic/gameLogic.js';
 import { ALIGNMENT_RATIO, ROLES } from './logic/constants.js';
 import { generateMarkdownHistory } from './logic/markdownGen.js';
+import * as cryptoUtils from './logic/crypto.js';
 
 import { renderLobbyView } from './components/lobbyView.js';
 import { renderHistoryView } from './components/historyView.js';
@@ -23,6 +24,8 @@ let appState = {
   gameState: 'lobby',
   playData: null,
   historyItems: [],
+  cryptoKeyPair: null,
+
   historyLastKey: null,
   hasMoreHistory: true,
   isLoadingHistory: false
@@ -73,8 +76,12 @@ function renderLobby() {
       if (!room) return alert("존재하지 않는 방입니다.");
       if (room.gameState !== 'lobby') return alert("이미 게임이 진행 중입니다.");
       
+      const keyPair = await cryptoUtils.generateKeyPair();
+      const pubKeyPem = await cryptoUtils.exportPublicKey(keyPair.publicKey);
+      appState.cryptoKeyPair = keyPair;
+      
       const userId = 'p_' + Date.now() + Math.floor(Math.random()*1000);
-      await api.joinRoom(roomCode, userId, nickname);
+      await api.joinRoom(roomCode, userId, nickname, pubKeyPem);
       
       localStorage.setItem('avalon_session', JSON.stringify({ roomId: roomCode, userId, nickname }));
       appState.roomId = roomCode;
@@ -108,9 +115,13 @@ function renderLobby() {
         if (success) {
           modalOverlay.classList.add('hidden');
           
+          const keyPair = await cryptoUtils.generateKeyPair();
+          const pubKeyPem = await cryptoUtils.exportPublicKey(keyPair.publicKey);
+          appState.cryptoKeyPair = keyPair;
+          
           // 방 생성 성공 즉시 방장으로 자동 접속
           const userId = 'p_' + Date.now() + Math.floor(Math.random()*1000);
-          await api.joinRoom(newCode, userId, nickname);
+          await api.joinRoom(newCode, userId, nickname, pubKeyPem);
           
           localStorage.setItem('avalon_session', JSON.stringify({ roomId: newCode, userId, nickname }));
           appState.roomId = newCode;
@@ -236,7 +247,7 @@ function startRoomSync() {
     refreshCurrentView();
   });
 
-  api.subscribeToPlayers(appState.roomId, (players) => {
+  api.subscribeToPlayers(appState.roomId, async (players) => {
     const oldPlayers = appState.playersData || {};
     const newPlayers = players || {};
     
@@ -250,7 +261,8 @@ function startRoomSync() {
             oldPlayers[key].isOnline !== newPlayers[key].isOnline ||
             oldPlayers[key].isReady !== newPlayers[key].isReady ||
             oldPlayers[key].role !== newPlayers[key].role ||
-            oldPlayers[key].nickname !== newPlayers[key].nickname) {
+            oldPlayers[key].nickname !== newPlayers[key].nickname ||
+            JSON.stringify(oldPlayers[key].encryptedRole) !== JSON.stringify(newPlayers[key].encryptedRole)) {
           changed = true;
           break;
         }
@@ -260,6 +272,17 @@ function startRoomSync() {
     appState.playersData = newPlayers;
     api.claimHost(appState.roomId, appState.currentHostId, appState.myUserId, appState.playersData);
     
+    // 복호화 로직 (내 암호화된 직업 정보가 있다면)
+    const myData = appState.playersData[appState.myUserId];
+    if (myData && myData.encryptedRole && appState.cryptoKeyPair && !appState.myDecryptedRole) {
+      const decrypted = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, myData.encryptedRole);
+      if (decrypted) {
+        appState.myDecryptedRole = decrypted.role;
+        appState.myDecryptedSecrets = decrypted.secretList;
+        changed = true; // 복호화 완료 시 화면 갱신
+      }
+    }
+
     // 만약 내가 방에서 튕겼다면 로비로 쫓겨남
     if (!appState.playersData[appState.myUserId]) {
       api.unsubscribeAll();
@@ -356,13 +379,57 @@ function refreshCurrentView() {
           await api.updateHeartbeat(appState.roomId, playerIds[i]); // 살려두기
           api.db && await api.updateHeartbeat(appState.roomId, playerIds[i]);
           // TODO : update player role securely
-          appState.playersData[playerIds[i]].role = roles[i];
+          delete appState.playersData[playerIds[i]].role; // Remove plaintext role
           await api.setPlayerReady(appState.roomId, playerIds[i], false); // reset ready
         }
         
-        // Roles 업데이트
+        // Roles 업데이트 (E2EE 암호화 적용)
         const updates = {};
-        playerIds.forEach((id, idx) => { updates[`rooms/${appState.roomId}/players/${id}/role`] = roles[idx]; });
+        const hostEncryptedRoles = {};
+        
+        for (let i = 0; i < playerIds.length; i++) {
+          const pId = playerIds[i];
+          const role = roles[i];
+          
+          // 각 플레이어별 기밀 정보 계산
+          let secretList = [];
+          const isEvil = [ROLES.ASSASSIN, ROLES.MORGANA, ROLES.MODRED, ROLES.OBERON, ROLES.MINION].includes(role);
+          
+          for (let j = 0; j < playerIds.length; j++) {
+            if (i === j) continue;
+            const targetId = playerIds[j];
+            const targetRole = roles[j];
+            const targetP = appState.playersData[targetId];
+            const targetIsEvil = [ROLES.ASSASSIN, ROLES.MORGANA, ROLES.MODRED, ROLES.OBERON, ROLES.MINION].includes(targetRole);
+            
+            if (role === ROLES.MERLIN) {
+              if (targetIsEvil && targetRole !== ROLES.MODRED) secretList.push(`😈 <b>${targetP.nickname}</b> (악)`);
+            } else if (role === ROLES.PERCIVAL) {
+              if (targetRole === ROLES.MERLIN || targetRole === ROLES.MORGANA) secretList.push(`🧙‍♂️ <b>${targetP.nickname}</b> (멀린 또는 모르가나)`);
+            } else if (isEvil && role !== ROLES.OBERON) {
+              if (targetIsEvil && targetRole !== ROLES.OBERON) secretList.push(`🤝 <b>${targetP.nickname}</b> (같은 편)`);
+            }
+          }
+          
+          const payload = { role, secretList };
+          
+          // 플레이어의 공개키로 암호화
+          const pubKeyPem = appState.playersData[pId].publicKey;
+          if (pubKeyPem) {
+            const encryptedPayload = await cryptoUtils.encryptData(pubKeyPem, payload);
+            updates[`rooms/${appState.roomId}/players/${pId}/encryptedRole`] = encryptedPayload;
+          }
+          
+          // 방장의 백업용 (나중에 게임 기록용)
+          hostEncryptedRoles[pId] = role;
+        }
+        
+        // 방장의 공개키로 전체 직업을 암호화하여 저장
+        if (appState.cryptoKeyPair) {
+          const myPubKeyPem = await cryptoUtils.exportPublicKey(appState.cryptoKeyPair.publicKey);
+          const hostBackup = await cryptoUtils.encryptData(myPubKeyPem, hostEncryptedRoles);
+          updates[`rooms/${appState.roomId}/playData/hostBackupRoles`] = hostBackup;
+        }
         
         const newPlayData = initializePlayData(playerIds);
         
@@ -374,7 +441,7 @@ function refreshCurrentView() {
       }
     });
   } else if (appState.view === 'game') {
-    renderGamePhase(viewContainer, appState.gameState, appState.playData, appState.myUserId, appState.playersData, appState.isHost, {
+    renderGamePhase(viewContainer, appState.gameState, appState.playData, appState.myUserId, appState.playersData, appState.isHost, appState.myDecryptedRole, appState.myDecryptedSecrets, {
       onSubmitTeam: (teamIds) => {
         const tlItem = { type: 'team_proposed', leaderId: appState.myUserId, team: teamIds, attempt: (appState.playData.voteTrack || 0) + 1 };
         const tl = [...(appState.playData.timeline || []), tlItem];
@@ -494,7 +561,22 @@ async function handlePhaseTransition(currentState, pData) {
 async function handleGameOver() {
   if (appState.playData && appState.playData.historySaved) return;
   
-  const md = generateMarkdownHistory(appState.roomId, appState.playersData, appState.playData);
+  let rolesForHistory = {};
+  if (appState.playData.hostBackupRoles && appState.cryptoKeyPair) {
+    const decrypted = await cryptoUtils.decryptData(appState.cryptoKeyPair.privateKey, appState.playData.hostBackupRoles);
+    if (decrypted) {
+      rolesForHistory = decrypted;
+    }
+  }
+
+  // Generate markdown requires playersData to have 'role' property
+  const fakePlayersData = JSON.parse(JSON.stringify(appState.playersData));
+  for (const pId in fakePlayersData) {
+    if (rolesForHistory[pId]) fakePlayersData[pId].role = rolesForHistory[pId];
+    else fakePlayersData[pId].role = '??? (복호화 불가)';
+  }
+
+  const md = generateMarkdownHistory(appState.roomId, fakePlayersData, appState.playData);
   const now = new Date();
   
   await api.saveGameHistory({
@@ -507,6 +589,8 @@ async function handleGameOver() {
 }
 
 async function handleRestart() {
+  appState.myDecryptedRole = null;
+  appState.myDecryptedSecrets = null;
   Object.keys(appState.playersData).forEach(id => {
     api.setPlayerReady(appState.roomId, id, false);
   });

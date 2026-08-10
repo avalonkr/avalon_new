@@ -92,12 +92,13 @@ class FirebaseAPI {
     }
   }
 
-  async joinRoom(roomId, userId, nickname) {
+  async joinRoom(roomId, userId, nickname, publicKey = "") {
     const playerRef = ref(this.db, `rooms/${roomId}/players/${userId}`);
     await update(playerRef, {
       nickname: nickname,
       isOnline: true,
       role: 'pending',
+      publicKey: publicKey,
       isReady: false,
       lastActive: serverTimestamp()
     });
@@ -149,7 +150,7 @@ class FirebaseAPI {
     // 호스트가 없거나, Firebase 상에서 완전히 오프라인으로 판정(isOnline === false)되었을 때만 탈취
     // (모바일 환경 백그라운드 전환 시 잦은 방장 탈취 현상 방지)
     const isHostOffline = hostData ? (hostData.isOnline === false) : false;
-    const isHostUnresponsive = hostData ? (estimatedServerTime - (hostData.lastActive || 0) > 60000) : false; // 60초 무응답
+    const isHostUnresponsive = hostData ? (estimatedServerTime - (hostData.lastActive || 0) > 180000) : false; // 3분 무응답
 
     if (!currentHostId || !hostData || isHostOffline || isHostUnresponsive) {
       await runTransaction(ref(this.db, `rooms/${roomId}/host`), (inDbHost) => {
