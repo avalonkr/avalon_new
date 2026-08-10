@@ -27,7 +27,7 @@ export function generateMarkdownHistory(roomId, playersData, playData) {
       
       md += `### 🚩 ${roundNum}라운드 - ${evt.attempt}차 제안\n`;
       md += `* **👑 원정대장:** ${leaderName} ${leaderTag}\n`;
-      md += `* **👥 원정대원:** [ ${teamNames} ]\n`;
+      md += `* **👥 원정대원:** ${teamNames}\n`;
     }
     else if (evt.type === 'team_voted') {
       const isPassed = evt.passed ? "가결 🟢" : "부결 🔴";
@@ -73,7 +73,7 @@ export function generateMarkdownHistory(roomId, playersData, playData) {
       const isSuccess = evt.success ? "성공 🟢" : "실패 🔴";
       
       md += `### 🗡️ 암살자 지목\n`;
-      md += `* **암살자(${assassinName})**가 멀린으로 지목한 대상: **${targetName}** (${targetRole})\n`;
+      md += `* 암살자(${assassinName})의 암살 대상: **${targetName}** (${targetRole})\n`;
       md += `* **암살 결과:** ${isSuccess}\n\n`;
     }
   });
