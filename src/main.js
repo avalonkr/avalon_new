@@ -189,7 +189,7 @@ function renderLobby() {
               appState.isLoadingHistory = true;
               try {
                 const data = await api.fetchHistoryPage(10, appState.historyLastKey);
-                let entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+                let entries = Object.entries(data).sort((a, b) => a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0));
                 if (appState.historyLastKey) {
                   entries = entries.filter(([key]) => key !== appState.historyLastKey);
                 }
@@ -216,7 +216,7 @@ function renderLobby() {
       
       try {
         const data = await api.fetchHistoryPage(10);
-        let entries = Object.entries(data).sort((a, b) => a[0].localeCompare(b[0]));
+        let entries = Object.entries(data).sort((a, b) => a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0));
         if (entries.length < 10) appState.hasMoreHistory = false;
         entries.reverse();
         if (entries.length > 0) {
